@@ -1,0 +1,27 @@
+## Interface: 16001
+## Title: Vendor Sniper
+## Notes: Finds Auction House listings priced below their vendor sell price. Read-only: you browse and buy yourself.
+## Author: Daniel Sikora
+## Version: 0.1.0
+## SavedVariables: VendorSniperDB
+
+# Pure logic (no WoW API access; tested outside the game)
+Logic\Money.lua
+Logic\Categories.lua
+Logic\Sorting.lua
+Logic\ProfitCalculator.lua
+Logic\Listings.lua
+Logic\AuctionEvaluator.lua
+Logic\Settings.lua
+Util\Callbacks.lua
+Data\ItemCache.lua
+Data\ResultStore.lua
+
+# Services (WoW API access goes through WoWAPI only)
+Services\WoWAPI.lua
+Services\VendorPriceService.lua
+Services\ScannerScheduler.lua
+Services\AuctionScanner.lua
+
+Diagnostics.lua
+Core.lua
