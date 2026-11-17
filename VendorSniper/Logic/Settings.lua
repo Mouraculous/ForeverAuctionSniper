@@ -50,14 +50,7 @@ function Settings.Defaults()
 			mode = Settings.LOOKUP_CLICK,
 			batchMaxPerMinute = 30,
 		},
-		window = {
-			point = "CENTER",
-			relativePoint = "CENTER",
-			x = 0,
-			y = 0,
-			width = 720,
-			height = 460,
-		},
+		-- No window position/size: the UI is a tab inside the fixed-size Auction House frame.
 	}
 end
 
@@ -115,9 +108,6 @@ function Settings.Apply(saved)
 		Settings.BATCH_MIN_PER_MINUTE,
 		Settings.BATCH_MAX_PER_MINUTE)
 
-	local w = saved.window
-	w.width = clamp(w.width, 480, 1600)
-	w.height = clamp(w.height, 260, 1200)
 
 	saved.schemaVersion = Settings.SCHEMA_VERSION
 	return saved

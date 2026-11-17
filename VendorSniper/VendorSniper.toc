@@ -2,7 +2,7 @@
 ## Title: Vendor Sniper
 ## Notes: Finds Auction House listings priced below their vendor sell price. Read-only: you browse and buy yourself.
 ## Author: Daniel Sikora
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: VendorSniperDB
 
 # Pure logic (no WoW API access; tested outside the game)
@@ -13,6 +13,7 @@ Logic\ProfitCalculator.lua
 Logic\Listings.lua
 Logic\AuctionEvaluator.lua
 Logic\Settings.lua
+Logic\ResultsView.lua
 Util\Callbacks.lua
 Data\ItemCache.lua
 Data\ResultStore.lua
@@ -24,4 +25,11 @@ Services\ScannerScheduler.lua
 Services\AuctionScanner.lua
 
 Diagnostics.lua
+
+# Auction House tab (the row mixin must exist before the XML template that uses it)
+UI\ResultsList.lua
+UI\Templates.xml
+UI\FilterPanel.lua
+UI\MainWindow.lua
+
 Core.lua

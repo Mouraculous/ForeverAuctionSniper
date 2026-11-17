@@ -52,12 +52,68 @@ function Core:Initialize()
 	})
 	self.lastResult = nil
 	self.browseChangedSinceScan = false
+	self.scanState = { isScanning = false, done = 0, total = 0, hasScanned = false }
 
-	-- Evaluation runs first; presentation handlers registered later see lastResult.
-	self.callbacks:Register("SCAN_COMPLETE", function() self:Reevaluate() end, self)
+	-- Evaluation and state tracking run first; presentation handlers registered later see the results.
+	local cb = self.callbacks
+	cb:Register("SCAN_STARTED", function(total)
+		self.scanState.isScanning, self.scanState.done, self.scanState.total = true, 0, total
+	end, self)
+	cb:Register("SCAN_PROGRESS", function(done, total)
+		self.scanState.done, self.scanState.total = done, total
+	end, self)
+	cb:Register("SCAN_COMPLETE", function()
+		self.scanState.isScanning, self.scanState.hasScanned = false, true
+		self:Reevaluate()
+	end, self)
+	cb:Register("SCAN_CANCELLED", function() self.scanState.isScanning = false end, self)
+	cb:Register("SCAN_FAILED", function() self.scanState.isScanning = false end, self)
 
+	if ns.MainWindow then
+		ns.MainWindow:Init(self)
+	end
 	self:RegisterChatFeedback()
 	self:RegisterSlashCommands()
+
+	-- The Blizzard AH UI is load-on-demand; it may already be loaded (e.g. after /reload at the AH).
+	if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Blizzard_AuctionHouseUI") then
+		cb:Fire("BLIZZARD_AH_LOADED")
+	end
+end
+
+-- State the window needs to render (see ns.ResultsView).
+function Core:GetViewState()
+	local scan = self.scanState
+	return {
+		isOpen = self.scanner:IsAuctionHouseOpen(),
+		isScanning = scan.isScanning,
+		hasScanned = scan.hasScanned,
+		scanDone = scan.done,
+		scanTotal = scan.total,
+		result = self.lastResult,
+		lookup = self.scheduler:GetLookupStatus(),
+		lookupMode = self.db.lookup.mode,
+		browseChanged = self.browseChangedSinceScan and scan.hasScanned,
+		isStale = self.store.isStale,
+	}
+end
+
+-- Call after changing anything in self.db: validates, syncs the UI and re-evaluates.
+function Core:OnSettingsChanged()
+	Settings.Apply(self.db)
+	self.scheduler:SetMaxPerMinute(self.db.lookup.batchMaxPerMinute)
+	self.callbacks:Fire("SETTINGS_CHANGED")
+	if self.lastResult or self.store:CountBrowse() > 0 or self.store:CountGroups() > 0 then
+		self:RequestReevaluate()
+	end
+end
+
+function Core:SetLookupMode(mode, perMinute)
+	self.db.lookup.mode = mode
+	if perMinute then
+		self.db.lookup.batchMaxPerMinute = perMinute
+	end
+	self:OnSettingsChanged()
 end
 
 -- Evaluation ---------------------------------------------------------------
@@ -179,12 +235,16 @@ local events = {}
 function events.ADDON_LOADED(name)
 	if name == addonName then
 		Core:Initialize()
+	elseif name == "Blizzard_AuctionHouseUI" and Core.db then
+		Core.callbacks:Fire("BLIZZARD_AH_LOADED")
 	end
 end
 
 function events.AUCTION_HOUSE_SHOW()
 	Core.scanner:ClearSession()
 	Core.lastResult = nil
+	Core.browseChangedSinceScan = false
+	Core.scanState.hasScanned = false
 	Core.scanner:SetAuctionHouseOpen(true)
 	Core.callbacks:Fire("AUCTION_HOUSE_OPENED")
 end
@@ -266,7 +326,12 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 	events[event](...)
 end)
 
--- Chat feedback (until the window exists) -------------------------------------
+-- Chat feedback --------------------------------------------------------------
+-- The window shows everything when its tab is open; chat covers slash-command use.
+
+function Core:IsWindowActive()
+	return ns.MainWindow ~= nil and ns.MainWindow:IsActive()
+end
 
 function Core:RegisterChatFeedback()
 	local cb = self.callbacks
@@ -274,10 +339,17 @@ function Core:RegisterChatFeedback()
 		Diagnostics.Print(Diagnostics.SCAN_FAIL_TEXT[reason] or ("Scan failed: " .. tostring(reason)))
 	end)
 	cb:Register("SCAN_COMPLETE", function(summary)
-		local result = self.lastResult
-		Diagnostics.Print("Scanned %d browse results%s.", summary.total,
-			summary.hasFullResults and "" or " (more pages exist; scroll the AH list to load them, then scan again)")
-		Diagnostics.PrintResults(result, 5, self.store.isStale)
+		if not summary.hasFullResults then
+			Diagnostics.Print("Scanned %d browse results. More pages exist: scroll the Buy list to load them, then scan again.",
+				summary.total)
+		end
+		if self:IsWindowActive() then
+			return
+		end
+		if summary.hasFullResults then
+			Diagnostics.Print("Scanned %d browse results.", summary.total)
+		end
+		Diagnostics.PrintResults(self.lastResult, 5, self.store.isStale)
 	end)
 	cb:Register("SCAN_CANCELLED", function()
 		Diagnostics.Print("Scan cancelled.")
@@ -307,6 +379,14 @@ local function parsePercentToBasisPoints(text)
 end
 
 local commands = {}
+
+function commands.show()
+	if not (ns.MainWindow and ns.MainWindow:IsBuilt() and AuctionHouseFrame and AuctionHouseFrame:IsShown()) then
+		Diagnostics.Print("Open the Auction House first; Vendor Sniper is a tab in it.")
+		return
+	end
+	ns.MainWindow:Activate()
+end
 
 function commands.scan()
 	Core:StartScan()
@@ -339,12 +419,7 @@ function commands.lookup(arg)
 			Core.db.lookup.mode, Core.db.lookup.batchMaxPerMinute)
 		return
 	end
-	Core.db.lookup.mode = mode
-	if perMinute and perMinute ~= "" then
-		Core.db.lookup.batchMaxPerMinute = tonumber(perMinute)
-	end
-	Settings.Apply(Core.db)
-	Core.scheduler:SetMaxPerMinute(Core.db.lookup.batchMaxPerMinute)
+	Core:SetLookupMode(mode, tonumber(perMinute))
 	Diagnostics.Print("Lookup mode set to %s (%d/min budget).", Core.db.lookup.mode, Core.db.lookup.batchMaxPerMinute)
 end
 
@@ -354,6 +429,7 @@ function commands.sort(arg)
 		return
 	end
 	Core.db.sortKey = arg
+	Core:OnSettingsChanged()
 	Diagnostics.Print("Sorting by %s.", Sorting.LABELS[arg])
 end
 
@@ -364,6 +440,7 @@ function commands.minprofit(arg)
 		return
 	end
 	Core.db.minProfit = copper
+	Core:OnSettingsChanged()
 	Diagnostics.Print("Minimum profit set to %s.", Money.Format(copper))
 end
 
@@ -374,6 +451,7 @@ function commands.minroi(arg)
 		return
 	end
 	Core.db.minRoiBasisPoints = bp
+	Core:OnSettingsChanged()
 	Diagnostics.Print("Minimum ROI set to %s.", Money.FormatRoi(bp))
 end
 
@@ -384,6 +462,7 @@ function commands.maxbuyout(arg)
 		return
 	end
 	Core.db.maxBuyout = copper
+	Core:OnSettingsChanged()
 	Diagnostics.Print("Maximum buyout set to %s.", copper == 0 and "no limit" or Money.Format(copper))
 end
 
@@ -395,6 +474,7 @@ function commands.sound(arg)
 		if copper then
 			Core.db.sound.thresholdCopper = copper
 		end
+		Core:OnSettingsChanged()
 	end
 	Diagnostics.Print("Sound notification %s (threshold %s).",
 		Core.db.sound.enabled and "on" or "off", Money.Format(Core.db.sound.thresholdCopper))

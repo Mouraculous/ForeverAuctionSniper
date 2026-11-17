@@ -26,7 +26,12 @@ public sealed class LuaHarness
     /// AuctionData.lua) are installed first and every TOC file is loaded,
     /// Core.lua included. The stub controller is available as global <c>game</c>.
     /// </param>
-    public LuaHarness(bool withGameStubs = false)
+    /// <param name="withUiStubs">
+    /// Also installs TestFixtures/WoWUIStubs.lua: generic frame stand-ins plus
+    /// AuctionHouseFrame, so the Auction House tab code can be exercised.
+    /// Requires <paramref name="withGameStubs"/>.
+    /// </param>
+    public LuaHarness(bool withGameStubs = false, bool withUiStubs = false)
     {
         Script = new Script(CoreModules.Preset_Complete);
         Ns = new Table(Script);
@@ -38,10 +43,19 @@ public sealed class LuaHarness
             var stubs = LoadChunk(File.ReadAllText(FixturePath("WoWGlobals.lua")), "WoWGlobals.lua");
             Script.Globals["data"] = data;
             Script.Globals["game"] = Script.Call(stubs, data);
+            if (withUiStubs)
+            {
+                var ui = LoadChunk(File.ReadAllText(FixturePath("WoWUIStubs.lua")), "WoWUIStubs.lua");
+                Script.Globals["ui"] = Script.Call(ui, Script.Globals["game"]);
+            }
         }
 
         foreach (var relative in Toc.ReadFiles())
         {
+            if (!relative.EndsWith(".lua", StringComparison.OrdinalIgnoreCase))
+            {
+                continue; // XML templates are only meaningful inside the client
+            }
             if (!withGameStubs && GameOnlyFiles.Contains(Path.GetFileName(relative)))
             {
                 continue;

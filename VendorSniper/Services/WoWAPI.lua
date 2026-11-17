@@ -134,6 +134,17 @@ function WoWAPI.GetItemMaxStackSize(itemID)
 	return C_Item.GetItemMaxStackSizeByID(itemID)
 end
 
+-- r, g, b for an item quality (white when unknown).
+function WoWAPI.GetQualityColor(quality)
+	if type(quality) == "number" and type(C_Item.GetItemQualityColor) == "function" then
+		local r, g, b = C_Item.GetItemQualityColor(quality)
+		if r then
+			return r, g, b
+		end
+	end
+	return 1, 1, 1
+end
+
 -- Asks the client to load item data. The answer arrives as ITEM_DATA_LOAD_RESULT.
 function WoWAPI.RequestLoadItemData(itemID)
 	C_Item.RequestLoadItemDataByID(itemID)

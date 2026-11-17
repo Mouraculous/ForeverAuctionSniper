@@ -191,7 +191,8 @@ Diagnostics.SCAN_FAIL_TEXT = {
 }
 
 function Diagnostics.Help()
-	Diagnostics.Print("Commands (/vsniper or /vendorsniper):")
+	Diagnostics.Print("Commands (/vsniper or /vendorsniper). The Vendor Sniper tab in the Auction House does the same:")
+	Diagnostics.Print("  show - open the Vendor Sniper tab (Auction House must be open)")
 	Diagnostics.Print("  scan - evaluate the current Auction House browse results")
 	Diagnostics.Print("  results [n] - list the top n opportunities (default 10)")
 	Diagnostics.Print("  inspect - look up listings for candidates (mode: click = one, batch = all)")

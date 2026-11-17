@@ -195,8 +195,15 @@ Fields: `itemID, quantity, unitPrice, auctionID, owners, totalNumberOfOwners, ti
    * Commodity tier: `itemID:unitPrice` (quantity updated in place).
    * Two auctions of the same item at different prices stay separate.
 4. **Profit for commodities** is reported both per tier and as "buy the first N units". That is what a commodity purchase actually does.
-5. **Navigation to a result:** by default, fill `AuctionHouseFrame.SearchBar.SearchBox` with the item name and let the player press Search/Enter. A one-click "open item" via `AuctionHouseFrame:SelectBrowseResult` gets added only if in-game testing shows it doesn't block the later purchase.
-6. **Refresh button:** re-reads the current browse/search results without a new query. A new browse is the player's job in the standard UI.
+5. **Navigation to a result:** implemented as: hide the Vendor Sniper panel and fill `AuctionHouseFrame.SearchBar.SearchBox` with the item name; the player presses Enter. A one-click "open item" via `AuctionHouseFrame:SelectBrowseResult` gets added only if in-game testing shows it doesn't block the later purchase.
+6. **Refresh button:** merged into **Scan**, which becomes **Rescan** after the first scan. Both would read the same client-held browse results without a query, so two buttons would do the same thing. A new browse search is the player's job in the Buy tab, and the status line says when the browse results have changed since the last scan.
+7. **Auction House tab (decided 2026-11-17).** The UI is a "Vendor Sniper" tab inside the AH window, built only from Blizzard templates and atlases that exist in the Forever UI source (`PanelTabButtonTemplate`, `InsetFrameTemplate` + `auctionhouse-background-*`, `auctionhouse-rowstripe-1` / `-row-highlight`, `ColumnDisplayButtonShortTemplate` + `auctionhouse-ui-sortarrow`, `WowScrollBoxList` + `MinimalScrollBar`, `MoneyInputFrameTemplate`, `UICheckButtonTemplate`, `MenuUtil.CreateContextMenu`).
+   * The AH chooses views through the global `AuctionHouseFrameDisplayMode` table and `AuctionHouseFrame.Tabs`. Registering a new display mode would put addon-written (tainted) values on the code path Blizzard later runs to buy. So the tab **modifies no Blizzard table**:
+     * Our tab button lives in its own holder frame. The template's `parentArray="Tabs"` goes there, not into `AuctionHouseFrame.Tabs`.
+     * Selecting it shows our panel on top of the AH content area. Blizzard's frames stay in whatever display mode they were in, underneath.
+     * `hooksecurefunc(AuctionHouseFrame, "SetDisplayMode", …)` hides the panel whenever a Blizzard tab is picked or the AH switches views. `PanelTemplates_UpdateTabs(AuctionHouseFrame)` then restores Blizzard's own tab highlight from its untouched `selectedTab`.
+   * The only calls into Blizzard frames are cosmetic (tab art) plus `SearchBox:SetText` / `SetFocus` for navigation. Checklist row 9 confirms purchases still work.
+   * The window isn't resizable or movable: it's the AH frame's fixed 800×538 content area. The window size/position settings were dropped.
 
 ## 8. Other platform capabilities (confirmed in the Forever UI source)
 
@@ -225,6 +232,8 @@ Run these with the AH open and a browse search done (for example "Linen" and "Sw
 | 6 | Find any stackable non-commodity, and compare its browse `minPrice` with its listing `buyoutAmount`/`quantity` | Resolves the §3.4 ambiguity |
 | 7 | `/dump select(11, C_Item.GetItemInfo(2589)), GetItemInfo` | Vendor price, and whether the global exists |
 | 8 | `/dump C_AuctionHouse.SupportsCopperValues()` | Copper granularity |
+| 9 | Open the **Vendor Sniper** tab, scan, then switch back to Buy, open an item and buy it with Blizzard's buttons | The overlay tab doesn't block or taint purchases (§7.7) |
+| 10 | Look at the tab next to Buy / Sell / Auctions | Layout: tab position, panel covering the content area, money display still visible, column widths with coin icons |
 
 Until #4–#6 are confirmed, the code treats those behaviours as assumptions and keeps them behind isolated adapter functions.
 

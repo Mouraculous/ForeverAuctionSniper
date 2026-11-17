@@ -16,10 +16,11 @@ public class PackagingTests
     }
 
     [Fact]
-    public void TocListsExactlyTheAddonLuaFiles()
+    public void TocListsExactlyTheAddonLuaAndXmlFiles()
     {
         var listed = Toc.ReadFiles().Select(f => f.Replace('\\', '/')).ToHashSet();
-        var onDisk = Directory.EnumerateFiles(LuaHarness.AddonRoot, "*.lua", SearchOption.AllDirectories)
+        var onDisk = Directory.EnumerateFiles(LuaHarness.AddonRoot, "*.*", SearchOption.AllDirectories)
+            .Where(f => f.EndsWith(".lua") || f.EndsWith(".xml"))
             .Select(f => Path.GetRelativePath(LuaHarness.AddonRoot, f).Replace('\\', '/'))
             .ToHashSet();
         Assert.Equal(onDisk.OrderBy(x => x), listed.OrderBy(x => x));
